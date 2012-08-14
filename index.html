@@ -1,0 +1,280 @@
+<html>
+<head>
+	<title>
+		Google Authenticator Database "Importer"
+	</title>
+	<script src="sql.js"></script>
+	<script src="qrcode.js"></script>
+	<script>
+		function create_qrcode(text, typeNumber, errorCorrectLevel) {
+			var qr = qrcode(typeNumber || 4, errorCorrectLevel || 'M');
+			qr.addData(text);
+			qr.make();
+
+			return qr.createImgTag();
+		};
+		
+		function htmlEscape(str) {
+			return String(str)
+					.replace(/&/g, '&amp;')
+					.replace(/"/g, '&quot;')
+					.replace(/'/g, '&#39;')
+					.replace(/</g, '&lt;')
+					.replace(/>/g, '&gt;');
+		}
+		
+		function displayErrors(errors)
+		{
+			var import_error = document.getElementById('import_error');
+			
+			if (errors && errors.length > 0)
+			{
+				import_error.style.display = 'block';
+				import_error.innerHTML = errors.join('<br/>');
+			}
+			else
+			{
+				document.getElementById('import_error').style.display = 'none';
+			}
+		}
+		
+		function onDatabaseLoaded(evt)
+		{
+			var errors = [];
+			
+			try
+			{
+				var db = SQL.open(new Uint8Array(evt.target.result));
+				var accounts = db.exec('SELECT * FROM accounts ORDER BY _id');
+				
+				var codes_output = document.getElementById('codes');
+				var codes = [];
+				
+				for (var i=0, acc; acc = accounts[i]; ++i)
+				{
+					var email, secret, type, counter;
+					
+					for (var j=0, col; col = acc[j]; ++j)
+					{
+						if (col.column == 'email')
+							email = col.value;
+						else if (col.column == 'secret')
+							secret = col.value;
+						else if (col.column == 'type')
+							type = col.value;
+						else if (col.column == 'counter')
+							counter = col.value;						
+					}
+					
+					if (!email)
+					{
+						errors.push('Account #' + parseInt(i) + ' has no name.');
+						continue;
+					}
+
+					if (!secret)
+					{
+						errors.push('Account ' + email + ' has no secret.');
+						continue;
+					}
+					
+					var code_image;
+					if (type == 0)
+					{
+						 code_image = create_qrcode(
+							'otpauth://totp/' + email + '?secret=' + secret,
+							10);
+					}
+					else if (type == 1)
+					{
+						code_image = create_qrcode(
+							'otpauth://hotp/' + email + '?secret=' + secret + '&counter=' + counter,
+							10);
+					}
+					else
+					{
+						errors.push('Account ' + htmlEscape(email) + ' has unknown type ' + type + '.');
+						continue;
+					}
+						
+					codes.push(
+						'<div class="qrcode-box">' +
+							code_image + '<br/>' +
+							htmlEscape(email).replace('@', '<wbr/>@<wbr/>').replace('.', '<wbr/>@<wbr/>') +
+						'</div>');
+				}
+				
+				codes_output.innerHTML = codes.join(' ');
+				codes_output.style.display = 'block';
+			}
+			catch(e)
+			{
+				errors.push(htmlEscape(e.toString()));
+			}
+			
+			displayErrors(errors);
+		}
+		
+		function onDatabaseError(evt)
+		{
+			var errors = [];
+			switch(evt.target.error.code) {
+				case evt.target.error.NOT_FOUND_ERR:
+					errors.push('File not found.');
+					break;
+				case evt.target.error.NOT_READABLE_ERR:
+					errors.push('File is not readable.');
+					break;
+				case evt.target.error.ABORT_ERR:
+					break; // noop
+				default:
+					errors.push('An error occurred reading this file.');
+			};
+			displayErrors(errors);
+		}
+
+		// Open a database
+		function handleFileSelect(evt) {
+			displayErrors(null);
+			document.getElementById('codes').style.display = 'none';
+			
+			var errors = [];
+			
+			try
+			{
+				var files = evt.target.files;
+				for (var i=0, f; f = files[i]; ++i)
+				{
+					var reader = new FileReader();
+					reader.onload = onDatabaseLoaded;
+					reader.onerror = onDatabaseError;
+					reader.readAsArrayBuffer(f);
+				}
+			}
+			catch(e)
+			{
+				errors.push(htmlEscape(e.message));
+			}
+			
+			displayErrors(errors);
+		}
+	</script>
+	
+	<style>
+		body {
+			font-size: larger;
+			font-family: sans-serif;
+			margin-left: 5em;
+			margin-right: 5em;
+			margin-top: 3em;
+		}
+		
+		p {
+			line-height: 150%;
+		}
+		
+		output {
+			padding: 1em;
+			min-height: 30px;
+			border: solid 1px black;
+			background-color: #fffffc;
+			display: block;
+			margin-top: 10px;
+			margin-bottom: 10px;
+		}
+		
+		#import_error {
+			background-color: lightpink;
+		}
+		
+		.qrcode-box {
+			 display: inline-block;
+			 width: 130px;
+			 font-size: small;
+			 word-wrap: break-word;
+			 vertical-align: top;
+			 text-align: center;
+			 margin-right: 50px;
+			 line-height: 140%;
+		}
+		
+		code {
+			padding: 2px;
+			border: 1px solid lightgray;
+		}
+		
+		h1 {
+			border-bottom: 3px solid green;
+		}
+		
+		h2 {
+			border-bottom: 2px solid green;
+		}
+		
+		em {
+			font-style: normal;
+			color: green;
+		}
+		
+		.credits {
+			border-top: 1px dotted green;
+			padding-top: 10px;
+			font-style: italic;
+		}
+	</style>
+</head>
+<body>
+	<h1>Google Authenticator Database-to-QR converter</h1>
+		
+	<p>
+		Database (SQLite) file: <input type="file" id="file" name="file" />
+		
+		<output id="import_error" style="display:none;">
+		</output>
+	
+		<output id="codes" style="display:none;">
+		</output>
+	</p>
+	
+	<script>
+		document.getElementById('file').addEventListener('change', handleFileSelect, false);
+	</script>
+	
+	<h2>What is this?</h2>
+	
+	<p>
+		So, you've got a new Android phone and you want to move over
+		(or perhaps copy) your Google Authenticator (which might include
+		<a href="http://itservices.stanford.edu/service/webauth/twostep"/>more</a>
+		<a href="http://drupal.org/project/ga_login"/>than</a>
+		<a href="http://www.mnxsolutions.com/security/two-factor-ssh-with-google-authenticator.html">one</a>
+		<a href="http://helpdesk.lastpass.com/security-options/google-authenticator/">account</a>).
+		This workflow only works when the source device is <em>rooted</em>.
+		Otherwise, the only way to get the Google Authenticator database out
+		of the device is to root it.
+	</p>
+	
+	<p>
+		First, copy the source device's <code>/data/data/com.google.android.apps.authenticator2/databases/databases</code>
+		file to your computer. If you have ADB, run
+		<code>adb pull /data/data/com.google.android.apps.authenticator2/databases/databases</code>. Otherwise,
+		use a file manager application to copy it.
+	</p>
+	
+	<p>
+		If your new phone is also rooted, don't fuss with QR codes and just
+		copy the database to its target destination (with <code>adb push ...</code> or
+		a file manager). However, if it's <em>not rooted</em>, this is a simple
+		app to import your database quickly and painlessly <em>that's completely local</em> &mdash;
+		Your database is never sent anywhere. This app will generate QR codes out of your Google
+		Authenticator (SQLite) database.
+	</p>
+
+	<p class="credits">
+	Made with <a href="https://github.com/kripken/sql.js">sql.js</a>
+	and <a href="http://www.d-project.com/qrcode/index.html">QR Code Generator</a>.
+	</p>
+
+</body>
+</html>
+
