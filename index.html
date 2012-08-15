@@ -45,26 +45,18 @@
 			try
 			{
 				var db = SQL.open(new Uint8Array(evt.target.result));
-				var accounts = db.exec('SELECT * FROM accounts ORDER BY _id');
+				var accounts = db.exec('SELECT email,secret,type,counter FROM accounts ORDER BY _id');
 				
 				var codes_output = document.getElementById('codes');
 				var codes = [];
 				
 				for (var i=0, acc; acc = accounts[i]; ++i)
 				{
-					var email, secret, type, counter;
-					
-					for (var j=0, col; col = acc[j]; ++j)
-					{
-						if (col.column == 'email')
-							email = col.value;
-						else if (col.column == 'secret')
-							secret = col.value;
-						else if (col.column == 'type')
-							type = col.value;
-						else if (col.column == 'counter')
-							counter = col.value;						
-					}
+					var
+						email = acc[0].value,
+						secret = acc[1].value,
+						type = acc[2].value,
+						counter = acc[3].value;
 					
 					if (!email)
 					{
