@@ -21,3 +21,7 @@ Instructions
 1. Download the repository as a ZIP file.
 2. Extract the ZIP and open the index.html file in your browser (Google Chrome works). Do it locally. This script doesn't need any network access.
 3. Follow the directions.
+
+Background
+----------
+I've made this tool mostly to see how quickly I could whip one up with a bunch of existing code (sqlite.js and a QR code generator). It's pretty cool how nowadays one can make a local app like this. Yep, no server-side here at all.
